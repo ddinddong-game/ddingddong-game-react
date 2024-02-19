@@ -1,10 +1,15 @@
 import { app } from './firebase';
 import './index.css';
+import { Home } from './pages/Home';
 
 function App() {
-  console.log(app);
+  // console.log(app);
 
-  return <div></div>;
+  return (
+    <div>
+      <Home></Home>
+    </div>
+  );
 }
 
 export default App;

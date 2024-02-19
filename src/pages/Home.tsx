@@ -15,9 +15,10 @@ export const Home = () => {
 
       // classifier.current에 값을 할당하기
       const featureExtractor = ml5.featureExtractor('MobileNet', loadReady);
+      const options = { numLabels: 4 };
       classifier.current = featureExtractor.classification(
         ref.current,
-        videoReady
+        options
       );
     } else {
       if (ref.current && ref.current.srcObject) {
@@ -27,27 +28,35 @@ export const Home = () => {
       }
     }
   }, [cameraAccess]);
-  console.log('classifier', classifier.current);
 
-  const handleAddImage = () => {
+  const handleAddImage = (direction: 'left' | 'right' | 'up' | 'down') => {
     // classifier.current를 사용하여 메서드를 호출
     if (classifier.current) {
       console.log('이미지 더함', classifier.current);
 
-      classifier.current.addImage('이미지 더함');
+      classifier.current.addImage(direction);
     }
   };
 
   const handleStartTraining = () => {
     if (classifier.current) {
+      // classifier.current.train((lossValue) => {
+      //   console.log('Loss is', lossValue);
+      // });
       classifier.current.train((lossValue) => {
-        console.log('Loss is', lossValue);
+        if (lossValue) {
+          console.log('Loss is', lossValue);
+        } else {
+          console.log('Training Complete');
+        }
       });
     }
   };
 
   const handleClassify = () => {
     if (classifier.current) {
+      console.log('Classify', classifier.current);
+
       classifier.current.classify((error, result) => {
         console.log('result', result);
       });
@@ -60,13 +69,45 @@ export const Home = () => {
       <button className="border border-cyan-900" onClick={handleGetCamera}>
         Toggle Camera Access
       </button>
-      <button
-        className="border border-cyan-900"
-        onClick={handleAddImage}
-        disabled={!cameraAccess}
-      >
-        handleAddImage
-      </button>
+      <div className="flex flex-col">
+        <button
+          className="bg-yellow-300 border border-cyan-900"
+          onClick={() => {
+            handleAddImage('left');
+          }}
+          disabled={!cameraAccess}
+        >
+          left
+        </button>
+        <button
+          className="bg-yellow-300 border border-cyan-900"
+          onClick={() => {
+            handleAddImage('right');
+          }}
+          disabled={!cameraAccess}
+        >
+          right
+        </button>
+        <button
+          className="bg-yellow-300 border border-cyan-900"
+          onClick={() => {
+            handleAddImage('up');
+          }}
+          disabled={!cameraAccess}
+        >
+          up
+        </button>
+        <button
+          className="bg-yellow-300 border border-cyan-900"
+          onClick={() => {
+            handleAddImage('down');
+          }}
+          disabled={!cameraAccess}
+        >
+          down
+        </button>
+      </div>
+
       <button
         className="border border-cyan-900"
         onClick={handleStartTraining}

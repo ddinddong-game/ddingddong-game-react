@@ -98,9 +98,10 @@ export const Home = () => {
   };
 
   const handleStartTraining = () => {
-    // 3. 2를 통해 4방향의 이미지 등록이 완료되면 이미지 학습버튼을 누를 수 있음
+    // 3. 2를 통해 4방향의 이미지 등록이 완료되면 이미지 학습버튼을 누를 수 있음 = 버튼 disabled 속성으로 4개 다 눌러야만 하도록 제한
     if (classifier.current) {
       // 푸반: 진행률 눈에 보이는건 어떨까싶어서 걍 지피티한테 수식 만들어달랬더니 이상한 수식 줌 => 학습 진행률 나타내려면 다시 계산해야함ㅋㅋㅋㅋㅋ
+      // 여기서부터
       const initialLoss = 10; // 학습 시작 시의 초기 loss 값
       const targetLoss = 1; // 목표로 하는 최종 loss 값
 
@@ -118,11 +119,15 @@ export const Home = () => {
           setIsTrained(true);
         }
       });
+      // 여기까지가 지피티의 주석 및 계산 코드
     }
   };
 
   const handleToggleClassify = () => {
     // 4. 분류기 실행 토글 = 일시중지 버튼
+    // <Classify 분류기>
+    // result값이 나옴 => result의 label을 통해 키보드 이벤트 발생시킬 것
+    //    (지금 화면에 비치는 방향이 어디방향인지, 학습해둔 값을 토대로 result의 label로 분류해줌)
     setStartClassify((prev) => !prev);
   };
 
@@ -134,7 +139,7 @@ export const Home = () => {
           console.error(error);
         } else {
           console.log('result', result);
-          // 4-3. 분류 결과를 통해 키보드 이벤트 발생 =>
+          // 4-3. 분류 결과를 통해 키보드 이벤트 발생
           fireDirection(result[0].label);
           if (startClassify) {
             // 4-7. 일시중지 상태가 아니라면 다시 0.3초 후에 handleClassify 실행 => fireDirection으로 키보드 이벤트 발생 => 반복
@@ -160,9 +165,9 @@ export const Home = () => {
   }, [startClassify, isTrained, handleClassify]);
 
   const fireDirection = (direction: 'left' | 'right' | 'up' | 'down') => {
-    // 4-4. 분류 결과의 레이블을 통해 키보드 이벤트 발생
+    // 4-4. 분류 결과의 label을 통해 키보드 이벤트 발생
     const makeKeycode = convertLabelToKeycode(direction);
-    // 4-5. 키보드 이벤트를 생성하여 document에 디스패치(addEventListener가 아니라 그저 전달중)
+    // 4-5. 키보드 이벤트를 생성하여 document에 디스패치
     document.dispatchEvent(new KeyboardEvent('keydown', { key: makeKeycode }));
   };
 

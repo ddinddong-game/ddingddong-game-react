@@ -37,6 +37,56 @@ export const Home = () => {
   const disableClassify = !isTrained;
   const disableClassifyButton = !cameraAccess || !isTrained;
 
+  useEffect(() => {
+    // 1. 카메라 접근 권한
+    // 카메라 접근 버튼 토글마다 실행
+    if (cameraAccess) {
+      getCamera(ref);
+
+      const featureExtractor = ml5.featureExtractor('MobileNet', loadReady);
+      // classifier.current에 featureExtractor.classification() 메서드를 할당
+      // numLabels 옵션을 사용하여 분류기가 예측할 레이블 수를 지정
+      // 우리는 4개의 방향을 예측하므로 numLabels를 4로 설정
+      const options = { numLabels: 4 };
+      classifier.current = featureExtractor.classification(
+        ref.current,
+        options
+      );
+    } else {
+      if (ref.current && ref.current.srcObject) {
+        // 카메라 접근 권한 해제 시 카메라 스트림 해제
+        const tracks = (ref.current.srcObject as MediaStream).getTracks();
+        tracks.forEach((track) => track.stop());
+        ref.current.srcObject = null;
+      }
+    }
+  }, [cameraAccess]);
+  const handleGetCamera = () => {
+    // 1-1. 카메라 접근 권한 토글
+    setCameraAccess((prev) => !prev);
+  };
+
+  const getCamera = async (ref: React.RefObject<HTMLVideoElement>) => {
+    // 1-2. 카메라 접근 권한
+    // 카메라 접근 권한 요청
+    const constraints = { video: true };
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (ref.current) {
+        ref.current.srcObject = stream;
+      }
+    } catch (error) {
+      console.error('Error accessing the camera', error);
+    }
+  };
+
+  const loadReady = () => {
+    //1-3. 카메라 접근 권한 뒤 ml5.featureExtractor('MobileNet', loadReady) 실행
+    // MobileNet 모델을 사용하여 featureExtractor를 생성할 수 있는지 확인
+    console.log('MobileNet ready');
+    setIsReadyToCapture(true);
+  };
+
   const handleAddImage = (direction: 'left' | 'right' | 'up' | 'down') => {
     // 2. 이미지 등록
     // classifier.current를 사용하여 메서드를 호출
@@ -71,28 +121,9 @@ export const Home = () => {
     }
   };
 
-  const handleGetCamera = () => {
-    // 1-1. 카메라 접근 권한 토글
-    setCameraAccess((prev) => !prev);
-  };
-
-  const loadReady = () => {
-    //1-3. 카메라 접근 권한 뒤 ml5.featureExtractor('MobileNet', loadReady) 실행
-    // MobileNet 모델을 사용하여 featureExtractor를 생성할 수 있는지 확인
-    console.log('MobileNet ready');
-    setIsReadyToCapture(true);
-  };
-
   const handleToggleClassify = () => {
     // 4. 분류기 실행 토글 = 일시중지 버튼
     setStartClassify((prev) => !prev);
-  };
-
-  const fireDirection = (direction: 'left' | 'right' | 'up' | 'down') => {
-    // 4-4. 분류 결과의 레이블을 통해 키보드 이벤트 발생
-    const makeKeycode = convertLabelToKeycode(direction);
-    // 4-5. 키보드 이벤트를 생성하여 document에 디스패치(addEventListener가 아니라 그저 전달중)
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: makeKeycode }));
   };
 
   const handleClassify = () => {
@@ -115,45 +146,6 @@ export const Home = () => {
     }
   };
 
-  const getCamera = async (ref: React.RefObject<HTMLVideoElement>) => {
-    // 1-2. 카메라 접근 권한
-    // 카메라 접근 권한 요청
-    const constraints = { video: true };
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      if (ref.current) {
-        ref.current.srcObject = stream;
-      }
-    } catch (error) {
-      console.error('Error accessing the camera', error);
-    }
-  };
-
-  useEffect(() => {
-    // 1. 카메라 접근 권한
-    // 카메라 접근 버튼 토글마다 실행
-    if (cameraAccess) {
-      getCamera(ref);
-
-      const featureExtractor = ml5.featureExtractor('MobileNet', loadReady);
-      // classifier.current에 featureExtractor.classification() 메서드를 할당
-      // numLabels 옵션을 사용하여 분류기가 예측할 레이블 수를 지정
-      // 우리는 4개의 방향을 예측하므로 numLabels를 4로 설정
-      const options = { numLabels: 4 };
-      classifier.current = featureExtractor.classification(
-        ref.current,
-        options
-      );
-    } else {
-      if (ref.current && ref.current.srcObject) {
-        // 카메라 접근 권한 해제 시 카메라 스트림 해제
-        const tracks = (ref.current.srcObject as MediaStream).getTracks();
-        tracks.forEach((track) => track.stop());
-        ref.current.srcObject = null;
-      }
-    }
-  }, [cameraAccess]);
-
   useEffect(() => {
     // 4-1. 일시중지 상태가 아니라면 handleClassify 분류기 실행
     if (startClassify && isTrained) {
@@ -166,6 +158,13 @@ export const Home = () => {
       }
     }
   }, [startClassify, isTrained, handleClassify]);
+
+  const fireDirection = (direction: 'left' | 'right' | 'up' | 'down') => {
+    // 4-4. 분류 결과의 레이블을 통해 키보드 이벤트 발생
+    const makeKeycode = convertLabelToKeycode(direction);
+    // 4-5. 키보드 이벤트를 생성하여 document에 디스패치(addEventListener가 아니라 그저 전달중)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: makeKeycode }));
+  };
 
   useEffect(() => {
     // 4-6. addEventListener하여 디스패치된 키보드 이벤트를 처리

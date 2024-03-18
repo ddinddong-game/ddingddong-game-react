@@ -273,7 +273,7 @@ export const Home = () => {
         onClick={handleStartTraining}
         disabled={!cameraAccess || disableTraining}
       >
-        Start Training 트레이닝먼저~
+        1. Start Training 트레이닝먼저~
       </button>
       <button
         className={`border border-cyan-900 ${
@@ -282,7 +282,7 @@ export const Home = () => {
         onClick={handleToggleClassify}
         disabled={disableClassifyButton}
       >
-        Toggle 일시중지
+        2. Toggle 일시중지
       </button>
     </div>
   );

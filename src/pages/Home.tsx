@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 const convertLabelToKeycode = (direction: 'left' | 'right' | 'up' | 'down') => {
+  // 4. 단순 분류 걍 디렉션 자체를 arrow어쩌구로 바꿔도 될듯
   switch (direction) {
     case 'left':
       return 'ArrowLeft';
@@ -14,8 +15,10 @@ const convertLabelToKeycode = (direction: 'left' | 'right' | 'up' | 'down') => {
       return '';
   }
 };
+
 export const Home = () => {
   const ref = useRef<HTMLVideoElement | null>(null);
+  const classifyTimeoutRef = useRef(null);
   const classifier = useRef(null); // classifier 참조 생성
   const [isReadyToCapture, setIsReadyToCapture] = useState(false); // 사진을 찍을 수 있는 상태가 되었는지 = loadReady가 준비된 상태
   const [cameraAccess, setCameraAccess] = useState(false);
@@ -29,7 +32,92 @@ export const Home = () => {
   const [startClassify, setStartClassify] = useState(false);
   const [progress, setProgress] = useState(0);
 
+  const disableTraining =
+    !isCaptured.left || !isCaptured.right || !isCaptured.up || !isCaptured.down;
+  const disableClassify = !isTrained;
+  const disableClassifyButton = !cameraAccess || !isTrained;
+
+  const handleAddImage = (direction: 'left' | 'right' | 'up' | 'down') => {
+    // 2. 이미지 등록
+    // classifier.current를 사용하여 메서드를 호출
+    if (classifier.current) {
+      console.log('이미지 더함', classifier.current);
+      setIsCaptured((prev) => ({ ...prev, [direction]: true }));
+      classifier.current.addImage(direction);
+    }
+  };
+
+  const handleStartTraining = () => {
+    // 3. 2를 통해 4방향의 이미지 등록이 완료되면 이미지 학습버튼을 누를 수 있음
+    if (classifier.current) {
+      // 푸반: 진행률 눈에 보이는건 어떨까싶어서 걍 지피티한테 수식 만들어달랬더니 이상한 수식 줌 => 학습 진행률 나타내려면 다시 계산해야함ㅋㅋㅋㅋㅋ
+      const initialLoss = 10; // 학습 시작 시의 초기 loss 값
+      const targetLoss = 1; // 목표로 하는 최종 loss 값
+
+      classifier.current.train((lossValue) => {
+        if (lossValue) {
+          console.log('Loss is', lossValue);
+          // 현재 lossValue를 사용하여 진행률을 계산
+          let progress =
+            ((initialLoss - lossValue) / (initialLoss - targetLoss)) * 100;
+          progress = Math.min(Math.max(progress, 0), 100); // 진행률이 0과 100 사이의 값이 되도록 조정
+          setProgress(progress);
+        } else {
+          console.log('Training Complete');
+          setProgress(100); // 학습 완료 시 프로그레스를 100%로 설정
+          setIsTrained(true);
+        }
+      });
+    }
+  };
+
+  const handleGetCamera = () => {
+    // 1-1. 카메라 접근 권한 토글
+    setCameraAccess((prev) => !prev);
+  };
+
+  const loadReady = () => {
+    //1-3. 카메라 접근 권한 뒤 ml5.featureExtractor('MobileNet', loadReady) 실행
+    // MobileNet 모델을 사용하여 featureExtractor를 생성할 수 있는지 확인
+    console.log('MobileNet ready');
+    setIsReadyToCapture(true);
+  };
+
+  const handleToggleClassify = () => {
+    // 4. 분류기 실행 토글 = 일시중지 버튼
+    setStartClassify((prev) => !prev);
+  };
+
+  const fireDirection = (direction: 'left' | 'right' | 'up' | 'down') => {
+    // 4-4. 분류 결과의 레이블을 통해 키보드 이벤트 발생
+    const makeKeycode = convertLabelToKeycode(direction);
+    // 4-5. 키보드 이벤트를 생성하여 document에 디스패치(addEventListener가 아니라 그저 전달중)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: makeKeycode }));
+  };
+
+  const handleClassify = () => {
+    // 4-2. 분류기 실행 함수
+    if (classifier.current && startClassify) {
+      classifier.current.classify((error, result) => {
+        if (error) {
+          console.error(error);
+        } else {
+          console.log('result', result);
+          // 4-3. 분류 결과를 통해 키보드 이벤트 발생 =>
+          fireDirection(result[0].label);
+          if (startClassify) {
+            // 4-7. 일시중지 상태가 아니라면 다시 0.3초 후에 handleClassify 실행 => fireDirection으로 키보드 이벤트 발생 => 반복
+            classifyTimeoutRef.current = setTimeout(handleClassify, 300);
+            // 일단 넘 빨리, 많이 찍혀서 0.3초마다 실행되도록 함
+          }
+        }
+      });
+    }
+  };
+
   const getCamera = async (ref: React.RefObject<HTMLVideoElement>) => {
+    // 1-2. 카메라 접근 권한
+    // 카메라 접근 권한 요청
     const constraints = { video: true };
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -42,10 +130,15 @@ export const Home = () => {
   };
 
   useEffect(() => {
+    // 1. 카메라 접근 권한
+    // 카메라 접근 버튼 토글마다 실행
     if (cameraAccess) {
       getCamera(ref);
 
       const featureExtractor = ml5.featureExtractor('MobileNet', loadReady);
+      // classifier.current에 featureExtractor.classification() 메서드를 할당
+      // numLabels 옵션을 사용하여 분류기가 예측할 레이블 수를 지정
+      // 우리는 4개의 방향을 예측하므로 numLabels를 4로 설정
       const options = { numLabels: 4 };
       classifier.current = featureExtractor.classification(
         ref.current,
@@ -53,6 +146,7 @@ export const Home = () => {
       );
     } else {
       if (ref.current && ref.current.srcObject) {
+        // 카메라 접근 권한 해제 시 카메라 스트림 해제
         const tracks = (ref.current.srcObject as MediaStream).getTracks();
         tracks.forEach((track) => track.stop());
         ref.current.srcObject = null;
@@ -61,7 +155,20 @@ export const Home = () => {
   }, [cameraAccess]);
 
   useEffect(() => {
-    // 키보드 이벤트 처리 함수
+    // 4-1. 일시중지 상태가 아니라면 handleClassify 분류기 실행
+    if (startClassify && isTrained) {
+      handleClassify();
+    } else {
+      // 분류기 중지, = setTimeout 으로 실행된 handleClassify 함수 중지
+      if (classifyTimeoutRef.current !== null) {
+        clearTimeout(classifyTimeoutRef.current);
+        classifyTimeoutRef.current = null;
+      }
+    }
+  }, [startClassify, isTrained, handleClassify]);
+
+  useEffect(() => {
+    // 4-6. addEventListener하여 디스패치된 키보드 이벤트를 처리
     const handleKeyPress = (event: KeyboardEvent) => {
       switch (event.key) {
         case 'ArrowLeft':
@@ -91,84 +198,6 @@ export const Home = () => {
       document.removeEventListener('keydown', handleKeyPress);
     };
   }, []);
-
-  const handleGetCamera = () => {
-    setCameraAccess((prev) => !prev);
-  };
-
-  const handleAddImage = (direction: 'left' | 'right' | 'up' | 'down') => {
-    // classifier.current를 사용하여 메서드를 호출
-    if (classifier.current) {
-      console.log('이미지 더함', classifier.current);
-      setIsCaptured((prev) => ({ ...prev, [direction]: true }));
-      classifier.current.addImage(direction);
-    }
-  };
-
-  const handleStartTraining = () => {
-    if (classifier.current) {
-      // 푸반: 진행률 눈에 보이는건 어떨까싶어서 걍 지피티한테 수식 만들어달랬더니 이상한 수식 줌 => 학습 진행률 나타내려면 다시 계산해야함ㅋㅋㅋㅋㅋ
-      const initialLoss = 10; // 학습 시작 시의 초기 loss 값
-      const targetLoss = 1; // 목표로 하는 최종 loss 값
-
-      classifier.current.train((lossValue) => {
-        if (lossValue) {
-          console.log('Loss is', lossValue);
-          // 현재 lossValue를 사용하여 진행률을 계산
-          let progress =
-            ((initialLoss - lossValue) / (initialLoss - targetLoss)) * 100;
-          progress = Math.min(Math.max(progress, 0), 100); // 진행률이 0과 100 사이의 값이 되도록 조정
-          setProgress(progress);
-        } else {
-          console.log('Training Complete');
-          setProgress(100); // 학습 완료 시 프로그레스를 100%로 설정
-          setIsTrained(true);
-        }
-      });
-    }
-  };
-
-  const handleClassify = () => {
-    if (classifier.current && isTrained) {
-      classifier.current.classify((error, result) => {
-        if (error) {
-          console.error(error);
-        } else {
-          console.log('result', result);
-          fireDirection(result[0].label);
-          setTimeout(handleClassify, 300);
-        }
-      });
-    }
-  };
-
-  useEffect(() => {
-    if (!startClassify) {
-      console.log('toggle handleClassify');
-      handleClassify();
-    }
-  }, [startClassify]);
-
-  const fireDirection = (direction: 'left' | 'right' | 'up' | 'down') => {
-    console.log('fired!!!!', direction);
-    const makeKeycode = convertLabelToKeycode(direction);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: makeKeycode }));
-  };
-
-  const loadReady = () => {
-    console.log('MobileNet ready');
-    setIsReadyToCapture(true);
-  };
-
-  const handleToggleClassify = () => {
-    setStartClassify((prev) => !prev);
-  };
-
-  const disableTraining =
-    !isCaptured.left || !isCaptured.right || !isCaptured.up || !isCaptured.down;
-  const disableClassify = !isTrained;
-
-  const disableClassifyButton = !cameraAccess || !isTrained;
 
   return (
     <div>
@@ -254,29 +283,8 @@ export const Home = () => {
         onClick={handleToggleClassify}
         disabled={disableClassifyButton}
       >
-        Toggle 카메라 인식
+        Toggle 일시중지
       </button>
-      {/* <button
-        className={`border border-cyan-900 ${
-          disableClassify ? 'bg-gray-300' : 'bg-lime-300'
-        }`}
-        onClick={handleClassify}
-        disabled={!cameraAccess || !isTrained}
-      >
-        Start Classify 그담 분류~
-      </button> */}
     </div>
   );
 };
-
-// const getCamera = async (ref: React.RefObject<HTMLVideoElement>) => {
-//   const constraints = { video: true };
-//   try {
-//     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-//     if (ref.current) {
-//       ref.current.srcObject = stream;
-//     }
-//   } catch (error) {
-//     console.error('Error accessing the camera', error);
-//   }
-// };
